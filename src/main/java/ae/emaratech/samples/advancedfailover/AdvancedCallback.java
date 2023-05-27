@@ -22,7 +22,6 @@ public class AdvancedCallback {
             throw new IllegalArgumentException("key is not found in callback map.");
         if (timeoutInMillSec <= 0)
             throw new IllegalArgumentException("timeoutInMillSec should be positive value greater than zero.");
-        var processorBag = Sinks.one();
         // Get the current time
         Instant startTime = Instant.now();
         var publisher = callbackMap
@@ -32,6 +31,7 @@ public class AdvancedCallback {
                 .collect(Collectors.toList());
 
         // Add throttling
+        var processorBag = Sinks.one();
         publisher.add(Mono.delay(Duration.ofMillis(timeoutInMillSec))
                 .then(processorBag.asMono().map(m -> (Map.Entry<String, T>) m)));
         // Create an empty MonoProcessor
@@ -43,7 +43,7 @@ public class AdvancedCallback {
                             Instant endTime = Instant.now();
                             // Calculate the time elapsed in milliseconds
                             long elapsedMillis = Duration.between(startTime, endTime).toMillis();
-                            System.out.println("Entry: " + entry);
+                            System.out.println("Entry in the bag in case no results are exists before throttling : " + entry);
                             processorBag.emitValue(entry, Sinks.EmitFailureHandler.FAIL_FAST);
                             if (entry.getKey().equalsIgnoreCase(preferredKey) || (elapsedMillis > timeoutInMillSec)) {
                                 System.out.println("Result: " + entry + " elapsedMillis: " + elapsedMillis);

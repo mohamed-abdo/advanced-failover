@@ -19,9 +19,9 @@ public class Controller {
     @GetMapping({"", "/"})
     public Mono<String> get() {
         var result = advancedCallback.executor("server-1", 5000, Map.of(
-                "server-1", CompletableFuture.supplyAsync(() -> serve1(7000)),
-                "server-2", CompletableFuture.supplyAsync(() -> serve2(3500)),
-                "server-3", CompletableFuture.supplyAsync(() -> serve3(700))
+                "server-1", CompletableFuture.supplyAsync(() -> serve1(700)),
+                "server-2", CompletableFuture.supplyAsync(() -> serve2(15000)),
+                "server-3", CompletableFuture.supplyAsync(() -> serve3(7100))
         ));
         return Mono.fromFuture(result);
     }
