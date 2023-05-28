@@ -14,14 +14,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Component
-public class AdvancedCallback {
-    public <T> CompletableFuture<T> executor(String preferredKey, long timeoutInMillSec, Map<String, CompletableFuture<Map.Entry<String, T>>> callbackMap) {
-        Objects.requireNonNull(preferredKey);
+public class ResilientParallelExecutor {
+    public <T> CompletableFuture<T> execute(String preferredExecuteKey, Duration duration, Map<String, CompletableFuture<Map.Entry<String, T>>> callbackMap) {
+        Objects.requireNonNull(preferredExecuteKey);
+        Objects.requireNonNull(duration);
         Objects.requireNonNull(callbackMap);
-        if (!callbackMap.containsKey(preferredKey))
+        if (!callbackMap.containsKey(preferredExecuteKey))
             throw new IllegalArgumentException("key is not found in callback map.");
-        if (timeoutInMillSec <= 0)
-            throw new IllegalArgumentException("timeoutInMillSec should be positive value greater than zero.");
+        if (duration.getSeconds() <= 0)
+            throw new IllegalArgumentException("duration should be positive value greater than zero.");
         // Get the current time
         Instant startTime = Instant.now();
         var publisher = callbackMap
@@ -32,7 +33,7 @@ public class AdvancedCallback {
 
         // Add throttling
         var processorBag = Sinks.one();
-        publisher.add(Mono.delay(Duration.ofMillis(timeoutInMillSec))
+        publisher.add(Mono.delay(duration)
                 .then(processorBag.asMono().map(m -> (Map.Entry<String, T>) m)));
         // Create an empty MonoProcessor
         var processor = Sinks.one();
@@ -42,11 +43,11 @@ public class AdvancedCallback {
                             // Get the current time again
                             Instant endTime = Instant.now();
                             // Calculate the time elapsed in milliseconds
-                            long elapsedMillis = Duration.between(startTime, endTime).toMillis();
+                            var executionTime = Duration.between(startTime, endTime);
                             System.out.println("Entry in the bag in case no results are exists before throttling : " + entry);
                             processorBag.emitValue(entry, Sinks.EmitFailureHandler.FAIL_FAST);
-                            if (entry.getKey().equalsIgnoreCase(preferredKey) || (elapsedMillis > timeoutInMillSec)) {
-                                System.out.println("Result: " + entry + " elapsedMillis: " + elapsedMillis);
+                            if (entry.getKey().equalsIgnoreCase(preferredExecuteKey) || (executionTime.compareTo(duration) > 0)) {
+                                System.out.println("Result: " + entry + " elapsedTime: " + executionTime);
                                 processor.emitValue(entry.getValue(), Sinks.EmitFailureHandler.FAIL_FAST);
                             }
                         },
