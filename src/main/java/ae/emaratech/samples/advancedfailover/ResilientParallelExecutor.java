@@ -15,20 +15,21 @@ import java.util.stream.Collectors;
 
 @Component
 public class ResilientParallelExecutor {
-    public <T> CompletableFuture<T> execute(String preferredExecuteKey, Duration duration, Map<String, CompletableFuture<Map.Entry<String, T>>> callbackMap) {
-        Objects.requireNonNull(preferredExecuteKey);
+    public <T> CompletableFuture<T> execute(String preferredExecutionKey, Duration duration, Map<String, CompletableFuture<Map.Entry<String, T>>> futureExecutors) {
+        Objects.requireNonNull(preferredExecutionKey);
         Objects.requireNonNull(duration);
-        Objects.requireNonNull(callbackMap);
-        if (!callbackMap.containsKey(preferredExecuteKey))
+        Objects.requireNonNull(futureExecutors);
+        if (!futureExecutors.containsKey(preferredExecutionKey))
             throw new IllegalArgumentException("key is not found in callback map.");
         if (duration.getSeconds() <= 0)
             throw new IllegalArgumentException("duration should be positive value greater than zero.");
         // Get the current time
         Instant startTime = Instant.now();
-        var publisher = callbackMap
+        var publisher = futureExecutors
                 .values()
                 .stream()
-                .map(entrySupplier -> Mono.fromFuture(entrySupplier).subscribeOn(Schedulers.boundedElastic()))
+                .map(entrySupplier -> Mono.fromFuture(entrySupplier)
+                        .subscribeOn(Schedulers.boundedElastic()))
                 .collect(Collectors.toList());
 
         // Add throttling
@@ -44,19 +45,15 @@ public class ResilientParallelExecutor {
                             Instant endTime = Instant.now();
                             // Calculate the time elapsed in milliseconds
                             var executionTime = Duration.between(startTime, endTime);
-                            System.out.println("Entry in the bag in case no results are exists before throttling : " + entry);
                             processorBag.emitValue(entry, Sinks.EmitFailureHandler.FAIL_FAST);
-                            if (entry.getKey().equalsIgnoreCase(preferredExecuteKey) || (executionTime.compareTo(duration) > 0)) {
-                                System.out.println("Result: " + entry + " elapsedTime: " + executionTime);
+                            if (entry.getKey().equalsIgnoreCase(preferredExecutionKey) || (executionTime.compareTo(duration) > 0)) {
                                 processor.emitValue(entry.getValue(), Sinks.EmitFailureHandler.FAIL_FAST);
                             }
                         },
                         error -> {
-                            System.out.println("Error: " + error);
                             processor.tryEmitError(new Exception(error));
                         },
                         () -> {
-                            System.out.println("Stream completed.");
                             processor.tryEmitEmpty();
                         });
         return (CompletableFuture<T>) processor.asMono().toFuture();
